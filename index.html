@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>節奏挑戰賽 - 四級獨立排行版 - 大威老師</title>
+    <style>
+        body { font-family: 'Microsoft JhengHei', sans-serif; display: flex; padding: 20px; background: #f0f0f0; touch-action: none; overflow: hidden; margin: 0; height: 100vh; box-sizing: border-box; }
+        #leaderboard { width: 320px; background: #fff; padding: 20px; border-radius: 10px; margin-right: 20px; display: flex; flex-direction: column; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #records { flex: 1; overflow-y: auto; }
+        .record-item { border-bottom: 1px solid #ccc; padding: 5px 0; display: flex; justify-content: space-between; }
+        .game-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
+        
+        .level-selection { display: flex; gap: 5px; background: #e0e0e0; padding: 5px; border-radius: 8px; margin-bottom: 10px; }
+        .level-btn { padding: 6px 12px; border: none; background: #fff; cursor: pointer; font-weight: bold; border-radius: 5px; transition: 0.2s; }
+        .level-btn.active { background: #4CAF50; color: white; }
+
+        .grid-container { display: grid; grid-template-columns: repeat(4, 80px); gap: 10px; margin: 20px 0; }
+        .grid-cell { width: 80px; height: 80px; border: 2px dashed #999; background: #fafafa; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        .pool-area { width: 100%; height: 120px; display: flex; gap: 10px; padding: 10px; background: #eee; border-radius: 10px; justify-content: center; align-items: center; overflow-x: auto; }
+        .rhythm-item { width: 70px; height: 70px; cursor: pointer; border: 2px solid transparent; background: white; }
+        #timer { font-size: 35px; font-weight: bold; color: #d32f2f; margin: 10px; font-variant-numeric: tabular-nums; }
+        
+        #result-overlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); color: white; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .input-box { background: white; color: #333; padding: 30px; border-radius: 15px; display: flex; flex-direction: column; gap: 10px; width: 260px; align-items: center; }
+        .input-box input { width: 100%; box-sizing: border-box; }
+        .input-box button { width: 100%; }
+        button { cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="leaderboard">
+    <div id="records"></div>
+    <div style="margin-top: 15px; border-top: 1px solid #ccc; padding-top: 10px;">
+        <button onclick="saveRecordsAs()" style="width: 100%; padding: 10px; margin-bottom: 5px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 5px; font-weight: bold;">💾 另存全成績檔案</button>
+        <button id="quick-save-btn" onclick="quickSave()" style="width: 100%; padding: 10px; margin-bottom: 5px; cursor: pointer; background: #e67e22; color: white; border: none; border-radius: 5px; display: none; font-weight: bold;">⚡ 快速存檔</button>
+        <button onclick="loadRecords()" style="width: 100%; padding: 10px; cursor: pointer; background: #9b59b6; color: white; border: none; border-radius: 5px; font-weight: bold;">📂 讀取全成績檔案</button>
+    </div>
+</div>
+
+<div class="game-area">
+    <h1>節奏挑戰賽 <span id="current-level-title" style="color: #4CAF50;">[等級1]</span></h1>
+    
+    <div class="level-selection">
+        <button class="level-btn active" onclick="changeLevel(1)">等級 1 (慢/基本)</button>
+        <button class="level-btn" onclick="changeLevel(2)">等級 2 (快/基本)</button>
+        <button class="level-btn" onclick="changeLevel(3)">等級 3 (慢/全選)</button>
+        <button class="level-btn" onclick="changeLevel(4)">等級 4 (快/全選)</button>
+    </div>
+
+    <div id="timer">倒數: 60.00 秒</div>
+    
+    <div class="mode-selection">
+        <button onclick="setupGrid(4)" style="padding: 6px 15px;">4 題</button>
+        <button onclick="setupGrid(8)" style="padding: 6px 15px;">8 題</button>
+        <button onclick="playTargetRhythm()" style="background: #ffcc00; font-weight: bold; padding: 6px 15px;">播放目標並開始計時</button>
+        <button onclick="setupGrid(gameCount)" style="background: #ff9800; color: white; padding: 6px 15px;">換下一位</button>
+    </div>
+    
+    <div id="p1" class="grid-container"></div>
+    <div id="pool1" class="pool-area"></div>
+</div>
+
+<div id="result-overlay">
+    <h1 id="overlay-title">挑戰成功！</h1>
+    <div id="final-time" style="font-size: 40px; margin-bottom: 20px; text-align: center;"></div>
+    
+    <div id="input-container" class="input-box" style="display:none;">
+        <input type="text" id="in-grade" placeholder="請輸入班級" style="padding: 8px; font-size: 16px;">
+        <input type="text" id="in-name" placeholder="請輸入姓名" style="padding: 8px; font-size: 16px;">
+        <button onclick="submitRecord()" style="padding: 10px; background: #2ecc71; color: white; border: none; font-weight: bold; font-size: 16px; border-radius: 5px; margin-bottom: 5px;">確認送出</button>
+        
+        <button onclick="closeOverlayWithoutSaving()" style="padding: 10px; background: #e74c3c; color: white; border: none; font-weight: bold; font-size: 16px; border-radius: 5px;">不紀錄</button>
+    </div>
+    
+    <div id="close-container" style="display:none; text-align:center;">
+        <button onclick="document.getElementById('result-overlay').style.display='none'" style="padding:8px 20px; font-size: 18px;">關閉</button>
+    </div>
+</div>
+
+<script>
+    // 音檔路徑
+    const pathFast = "D:/轉移資料/創業資料夾/自製小遊戲/音樂課/聽節拍/音檔/";
+    const pathSlow = "D:/轉移資料/創業資料夾/自製小遊戲/音樂課/聽節拍/慢音檔/";
+
+    // 原始所有節奏
+    const allRhythmFiles = ["單拍.png", "單拍休止.png", "半拍.png", "長短短.png", "長休短短.png", "16分音符.png", "16分少一.png"];
+    const audioMap = Object.fromEntries(allRhythmFiles.map(f => [f, f.replace('.png', '.mp3')]));
+
+    // 初始化狀態變數
+    let currentLevel = 1;
+    let activeRhythms = [];
+    let currentTarget = [], gameCount = 4, selectedFile = null, startTime = null, timerInterval = null, isRunning = false, isPlaying = false;
+    let hasChallenged = false; // 🛑 用來標註此題是否已經開始進入挑戰流程（包含初次播音與計時中）
+    let currentAudioPlaybackId = 0; // 用來控管多重播音不要重疊
+    let lastTime = 0;
+    let fileHandle = null;
+
+    // 切換難度等級
+    function changeLevel(level) {
+        if (hasChallenged) return; // 挑戰進行中禁止切換難度
+        currentLevel = level;
+
+        // UI 視覺切換
+        document.getElementById('current-level-title').innerText = `[等級${level}]`;
+        document.querySelectorAll('.level-btn').forEach((btn, idx) => {
+            if (idx === level - 1) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+
+        // 依等級挑選節奏
+        if (level === 1 || level === 2) {
+            activeRhythms = ["單拍.png", "半拍.png", "單拍休止.png", "16分音符.png"];
+        } else {
+            activeRhythms = [...allRhythmFiles];
+        }
+
+        renderPool();
+        setupGrid(gameCount);
+    }
+
+    // 重新繪製可選取的節奏池 (Pool)
+    function renderPool() {
+        const pool = document.getElementById('pool1');
+        pool.innerHTML = '';
+        selectedFile = null; // 重置已選取的道具
+        activeRhythms.forEach(file => {
+            const img = document.createElement('img');
+            img.src = `圖片/${file}`; 
+            img.className = 'rhythm-item';
+            img.onclick = () => { 
+                selectedFile = file; 
+                pool.querySelectorAll('img').forEach(i => i.style.borderColor = 'transparent'); 
+                img.style.borderColor = '#2196F3'; 
+            };
+            pool.appendChild(img);
+        });
+    }
+
+    // 建立作答格子
+    function setupGrid(count) {
+        // 重置多重播放標記
+        currentAudioPlaybackId++;
+        isPlaying = false;
+
+        gameCount = count;
+        hasChallenged = false; // 恢復初始未挑戰狀態
+        
+        currentTarget = Array.from({length: count}, () => activeRhythms[Math.floor(Math.random() * activeRhythms.length)]);
+        
+        const container = document.getElementById('p1');
+        container.innerHTML = '';
+        for(let i=0; i<count; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            cell.onclick = () => { 
+                if(!hasChallenged) return; // 🛑 如果連第一次「播放目標」都沒按，不能作答
+                if(selectedFile) { 
+                    cell.innerHTML = `<img src="圖片/${selectedFile}" width="70" data-filename="${selectedFile}">`; 
+                    checkWinner(); 
+                } 
+            };
+            container.appendChild(cell);
+        }
+        resetTimer(); 
+        renderLeaderboard();
+        document.getElementById('result-overlay').style.display = 'none';
+    }
+
+    // 播放核心與限時啟動
+    async function playTargetRhythm() {
+        // 1. 如果「正在初次播音且計時還沒跑」，直接阻擋避免重複觸發
+        if (isPlaying && !isRunning) return; 
+
+        // 分配一個播音流水號，若中途點擊可打斷前一次的音檔序列播放
+        const thisPlaybackId = ++currentAudioPlaybackId;
+        isPlaying = true;
+
+        let basePath = "";
+        let readyDelay = 0;
+        let noteDelay = 0;
+
+        if (currentLevel === 1 || currentLevel === 3) {
+            basePath = pathSlow;
+            readyDelay = 4000;  
+            noteDelay = 1000;   
+        } else {
+            basePath = pathFast;
+            readyDelay = 2668;  
+            noteDelay = 667;    
+        }
+
+        // 2. 如果是「第一次播放」，走計時流程
+        if (!hasChallenged) {
+            hasChallenged = true; // 點擊當下格子立刻解鎖，允許邊聽邊點！
+            resetTimer();
+
+            // 執行音檔異步序列播放
+            (async () => {
+                try {
+                    if (thisPlaybackId !== currentAudioPlaybackId) return;
+                    await new Audio(basePath + '預備拍.mp3').play();
+                    await new Promise(r => setTimeout(r, readyDelay));
+                    
+                    for (let f of currentTarget) { 
+                        if (thisPlaybackId !== currentAudioPlaybackId) return;
+                        new Audio(basePath + audioMap[f]).play(); 
+                        await new Promise(r => setTimeout(r, noteDelay)); 
+                    }
+                } catch (e) {
+                    console.log("音檔播放錯誤");
+                } finally {
+                    if (thisPlaybackId === currentAudioPlaybackId) isPlaying = false;
+                }
+            })();
+
+            // 同步直接扣掉預備拍和題目時間，得出何時「真正開始計時」
+            const totalAudioDuration = readyDelay + (currentTarget.length * noteDelay);
+            
+            // 設定未來的 startTime (把音檔播完的時間點當作 0.00 秒)
+            startTime = Date.now() + totalAudioDuration; 
+            isRunning = true;
+
+            timerInterval = setInterval(() => { 
+                let elapsed = (Date.now() - startTime) / 1000;
+                
+                // 如果音樂還在播，elapsed 會是負數，畫面上強制顯示 60.00 秒
+                if (elapsed < 0) {
+                    document.getElementById('timer').innerText = `倒數: 60.00 秒`;
+                    document.getElementById('timer').style.color = '#d32f2f'; // 播音時維持紅色警告色
+                    return;
+                }
+
+                // 🟢 進入正式倒計時
+                let countdown = 60.00 - elapsed;
+                document.getElementById('timer').style.color = '#27ae60'; // 倒計時中轉為綠色提示
+
+                // ⏰ 60 秒時間到倒數歸零，強制判斷失敗
+                if (countdown <= 0) {
+                    countdown = 0.00;
+                    clearInterval(timerInterval);
+                    isRunning = false;
+                    hasChallenged = false;
+                    showTimeout(); 
+                }
+                document.getElementById('timer').innerText = `倒數: ${countdown.toFixed(2)} 秒`; 
+            }, 10);
+
+        } else {
+            // 3. ⚙️ 如果是「計時途中再點一次」，秒數不停，純重複播音
+            try {
+                await new Audio(basePath + '預備拍.mp3').play();
+                await new Promise(r => setTimeout(r, readyDelay));
+                
+                for (let f of currentTarget) { 
+                    if (thisPlaybackId !== currentAudioPlaybackId) return; // 被最新的一次打斷
+                    new Audio(basePath + audioMap[f]).play(); 
+                    await new Promise(r => setTimeout(r, noteDelay)); 
+                }
+            } catch (e) {
+                console.log("重複播放音檔錯誤");
+            } finally {
+                if (thisPlaybackId === currentAudioPlaybackId) isPlaying = false;
+            }
+        }
+    }
+
+    // 檢查答案是否正確
+    function checkWinner() {
+        const cells = document.querySelectorAll('#p1 .grid-cell img');
+        if (cells.length < gameCount) return;
+        const userOrder = Array.from(cells).map(img => img.dataset.filename);
+        if (userOrder.every((v, i) => v === currentTarget[i])) {
+            clearInterval(timerInterval); 
+            
+            // 計算最終花費秒數 (如果音檔還沒播完就通關，直接算 0 秒或極低秒數)
+            let calcTime = parseFloat(((Date.now() - startTime)/1000).toFixed(2));
+            lastTime = calcTime < 0 ? 0.00 : calcTime;
+
+            isRunning = false; 
+            hasChallenged = false;
+            showResult();
+        }
+    }
+
+    // 取得當前關卡排行在 LocalStorage 的 Key
+    function getCurrentKey() {
+        return `rhythmRecords_L${currentLevel}_${gameCount}`;
+    }
+
+    // 成功通關，檢查排行榜
+    function showResult() {
+        document.getElementById('overlay-title').innerText = "挑戰成功！";
+        document.getElementById('final-time').innerText = `總花費: ${lastTime} 秒`;
+        document.getElementById('result-overlay').style.display = 'flex';
+        
+        const key = getCurrentKey();
+        const records = JSON.parse(localStorage.getItem(key) || '[]');
+        
+        document.getElementById('close-container').style.display = 'none';
+
+        if (records.length < 10 || lastTime < records[9].time) {
+            document.getElementById('input-container').style.display = 'flex';
+        } else {
+            document.getElementById('input-container').style.display = 'none';
+            document.getElementById('final-time').innerHTML += '<br><span style="font-size:20px;color:#f39c12;">可惜未擠進前十名！</span>';
+            document.getElementById('close-container').style.display = 'block';
+        }
+    }
+
+    // 🔴 大威老師專用：不紀錄直接關閉視窗
+    function closeOverlayWithoutSaving() {
+        document.getElementById('in-name').value = ''; 
+        document.getElementById('in-grade').value = '';
+        document.getElementById('result-overlay').style.display = 'none';
+    }
+
+    // ⏰ 60 秒時間到，失敗畫面
+    function showTimeout() {
+        document.getElementById('overlay-title').innerText = "時間到！挑戰失敗";
+        document.getElementById('final-time').innerText = `很遺憾，沒能在 60 秒內完成！`;
+        document.getElementById('input-container').style.display = 'none';
+        document.getElementById('close-container').style.display = 'block'; // 失敗時允許點擊「關閉」回主畫面
+        document.getElementById('result-overlay').style.display = 'flex';
+    }
+
+    // 送出成績
+    function submitRecord() {
+        const name = document.getElementById('in-name').value.trim();
+        const grade = document.getElementById('in-grade').value.trim();
+        if (!name || !grade) return;
+        
+        const key = getCurrentKey();
+        let records = JSON.parse(localStorage.getItem(key) || '[]');
+        records.push({name, grade, time: lastTime});
+        records.sort((a, b) => a.time - b.time);
+        
+        localStorage.setItem(key, JSON.stringify(records.slice(0, 10)));
+        document.getElementById('in-name').value = ''; 
+        document.getElementById('in-grade').value = '';
+        renderLeaderboard(); 
+        document.getElementById('result-overlay').style.display = 'none';
+    }
+
+    // 更新排行榜顯示
+    function renderLeaderboard() {
+        const records = JSON.parse(localStorage.getItem(getCurrentKey()) || '[]');
+        document.getElementById('records').innerHTML = `<h2>🏆 等級${currentLevel} (${gameCount}題) 排行</h2>` + 
+            records.map((r, i) => `<div class="record-item"><span>${i+1}. ${r.grade} ${r.name}</span><span>${r.time}s</span></div>`).join('');
+    }
+
+    // 💡 讀寫核心
+    function getAllRecordsJSON() {
+        const backupData = {};
+        for (let l = 1; l <= 4; l++) {
+            for (let g of [4, 8]) {
+                const key = `rhythmRecords_L${l}_${g}`;
+                backupData[key] = JSON.parse(localStorage.getItem(key) || '[]');
+            }
+        }
+        return JSON.stringify(backupData, null, 2);
+    }
+
+    // 另存全成績檔案
+    async function saveRecordsAs() {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestName: `節奏挑戰賽_全等級成績備份.json`,
+                types: [{ description: 'JSON 檔案', accept: {'application/json': ['.json']} }]
+            });
+            fileHandle = handle;
+            const writable = await fileHandle.createWritable();
+            await writable.write(getAllRecordsJSON());
+            await writable.close();
+            document.getElementById('quick-save-btn').style.display = 'block';
+            alert("💾 成績全檔案儲存成功！");
+        } catch (e) { console.log("使用者取消儲存"); }
+    }
+
+    // 快速存檔
+    async function quickSave() {
+        if (!fileHandle) return;
+        try {
+            const writable = await fileHandle.createWritable();
+            await writable.write(getAllRecordsJSON());
+            await writable.close();
+            alert("⚡ 全等級成績快速存檔成功！");
+        } catch (e) { alert("快速存檔失敗"); }
+    }
+
+    // 讀取全成績檔案
+    async function loadRecords() {
+        try {
+            const [handle] = await window.showOpenFilePicker({
+                types: [{ description: 'JSON 檔案', accept: {'application/json': ['.json']} }]
+            });
+            fileHandle = handle;
+            const file = await fileHandle.getFile();
+            const text = await file.text();
+            const importedData = JSON.parse(text);
+            
+            for (const key in importedData) {
+                if (key.startsWith('rhythmRecords_L')) {
+                    localStorage.setItem(key, JSON.stringify(importedData[key]));
+                }
+            }
+            document.getElementById('quick-save-btn').style.display = 'block';
+            renderLeaderboard();
+            alert("📂 成功恢復全等級排行榜紀錄！");
+        } catch (e) { console.log("讀取失敗或取消"); }
+    }
+
+    function resetTimer() { 
+        clearInterval(timerInterval); 
+        isRunning = false; 
+        document.getElementById('timer').innerText = "倒數: 60.00 秒"; 
+        document.getElementById('timer').style.color = '#d32f2f'; // 回歸初始紅色
+    }
+
+    changeLevel(1);
+</script>
+</body>
+</html>
